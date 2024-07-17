@@ -6,7 +6,8 @@ default_verbosity = 2
 max_verbosity = 3
 runtime_files = {
     'podman': 'Containerfile',
-    'docker': 'Dockerfile'
+    'docker': 'Dockerfile',
+    'buildah': 'Containerfile',
 }
 default_container_runtime = 'podman'
 base_roles_path = '/usr/share/ansible/roles'
