@@ -16,6 +16,7 @@ COPY --from=builder /tmp/src/dist /tmp/src/dist
 RUN python3 -m ensurepip
 RUN python3 -m pip install --upgrade pip
 RUN python3 -m pip install /tmp/src/dist/*.tar.gz
+RUN dnf install -y git && dnf clean all
 
 RUN rm -rf /tmp/src
 RUN mkdir -p /project

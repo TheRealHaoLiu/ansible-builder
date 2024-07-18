@@ -1,0 +1,115 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ansible-buildah
+data:
+  GIT_URI: https://github.com/ansible/awx-ee.git
+  GIT_REF: devel
+  ANSIBLE_BUILDER_VERBOSITY: "3"
+  IMAGE_REGISTRY: quay.io
+  IMAGE_REPOSITORY: haoliu
+  IMAGE_NAME: awx-ee
+  IMAGE_TAG: built-with-buildah-for-real
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ansible-buildah
+spec:
+  restartPolicy: Never
+  initContainers:
+  - name: git-clone
+    image: quay.io/haoliu/ansible-builder:buildah
+    envFrom:
+    - configMapRef:
+        name: ansible-buildah
+    command:
+      - "git"
+      - "clone"
+      - "-b"
+      - "$(GIT_REF)"
+      - "$(GIT_URI)"
+      - "."
+    volumeMounts:
+    - name: project-volume
+      mountPath: /project
+  - name: create
+    image: quay.io/haoliu/ansible-builder:buildah
+    envFrom:
+    - configMapRef:
+        name: ansible-buildah
+    command:
+      - "ansible-builder"
+      - "create"
+      - "--output-filename"
+      - "Containerfile"
+      - "--verbosity=$(ANSIBLE_BUILDER_VERBOSITY)"
+    volumeMounts:
+    - name: project-volume
+      mountPath: /project
+  - name: build
+    image: quay.io/haoliu/ansible-builder:buildah
+    envFrom:
+    - configMapRef:
+        name: ansible-buildah
+    command:
+      - "buildah"
+      - "build"
+      - "--file"
+      - "Containerfile"
+      - "--tag"
+      - "$(IMAGE_REGISTRY)/$(IMAGE_REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
+      - "context"
+    # command: # Fake build to speed up development
+    #   - "buildah"
+    #   - "pull"
+    #   - "$(IMAGE_REGISTRY)/$(IMAGE_REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
+    volumeMounts:
+    - name: project-volume
+      mountPath: /project
+    - name: containers-volume
+      mountPath: /var/lib/containers
+    - name: fuse-device
+      mountPath: /dev/fuse
+  - name: push
+    image: quay.io/haoliu/ansible-builder:buildah
+    env:
+    - name: REGISTRY_AUTH_FILE
+      value: /var/run/secrets/containers/.dockerconfigjson
+    envFrom:
+    - configMapRef:
+        name: ansible-buildah
+    command:
+      - "buildah"
+      - "push"
+      - "$(IMAGE_REGISTRY)/$(IMAGE_REPOSITORY)/$(IMAGE_NAME):$(IMAGE_TAG)"
+    volumeMounts:
+    - name: containers-volume
+      mountPath: /var/lib/containers
+    - name: registry-auth
+      mountPath: /var/run/secrets/containers
+  containers:
+  - name: debug
+    image: quay.io/haoliu/ansible-builder:buildah
+    command: ["sleep", "infinity"]
+    volumeMounts:
+    - name: project-volume
+      mountPath: /project
+    - name: containers-volume
+      mountPath: /var/lib/containers
+    - name: fuse-device
+      mountPath: /dev/fuse
+    - name: registry-auth
+      mountPath: /var/run/secrets/containers
+  volumes:
+  - name: project-volume
+    emptyDir: {}
+  - name: containers-volume
+    emptyDir: {}
+  - name: fuse-device
+    hostPath:
+      path: /dev/fuse
+  - name: registry-auth
+    secret:
+      secretName: quay-auth
